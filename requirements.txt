@@ -5,7 +5,8 @@ gTTS>=2.4.0
 pygame>=2.5.0
 pyaudio>=0.2.14
 
-# AI & APIs
+# AI & APIs (Groq Ultra-Low Latency Inference)
+groq>=0.11.0
 openai>=1.0.0
 requests>=2.31.0
 python-dotenv>=1.0.0

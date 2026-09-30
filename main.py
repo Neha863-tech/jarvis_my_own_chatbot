@@ -1,7 +1,7 @@
 """
 JARVIS - Advanced Python Voice Assistant
-Engineered with dual-engine Speech Synthesis (gTTS + pyttsx3 fallback),
-intelligent wake-word detection, robust error handling, and OpenAI GPT integration.
+Powered by Groq ultra-low latency LLM inference (Llama 3), dual-engine Speech Synthesis
+(gTTS + pyttsx3 fallback), intelligent wake-word detection, and robust error handling.
 """
 
 import os
@@ -25,12 +25,21 @@ try:
 except ImportError:
     pass
 
-# Try importing OpenAI client
+# Import Groq client (primary) with OpenAI fallback compatibility
+GROQ_AVAILABLE = False
+OPENAI_AVAILABLE = False
+
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    pass
+
 try:
     from openai import OpenAI
     OPENAI_AVAILABLE = True
 except ImportError:
-    OPENAI_AVAILABLE = False
+    pass
 
 # Import local music library
 import musicLibrary
@@ -42,7 +51,8 @@ import musicLibrary
 
 # API Keys from environment or fallback
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 # Initialize Speech Recognizer
 recognizer = sr.Recognizer()
@@ -57,7 +67,6 @@ try:
     engine.setProperty('volume', 1.0)
     voices = engine.getProperty('voices')
     if voices:
-        # Default to a friendly voice if available
         engine.setProperty('voice', voices[0].id)
 except Exception as e:
     print(f"[Warning] Failed to configure pyttsx3 voices: {e}")
@@ -124,40 +133,61 @@ def speak(text: str):
 
 
 # ==============================================================================
-# AI Integration (OpenAI GPT)
+# AI Integration (Groq LPU Inference)
 # ==============================================================================
 
 def aiProcess(command: str) -> str:
     """
-    Queries OpenAI GPT for conversational answers with concise responses.
-    Handles missing API keys and network errors gracefully.
+    Queries Groq's ultra-fast LPU engine (Llama 3) for conversational intelligence.
+    Supports native groq SDK with OpenAI base_url fallback.
     """
-    if not OPENAI_AVAILABLE:
-        return "OpenAI library is not installed. Please run pip install openai."
+    api_key = GROQ_API_KEY
+    if not api_key or api_key.startswith("<") or "YOUR_GROQ" in api_key:
+        return "Groq API key is not configured. Please set your GROQ_API_KEY in the .env file."
 
-    api_key = OPENAI_API_KEY
-    if not api_key or api_key.startswith("<") or api_key == "YOUR_OPENAI_KEY":
-        return "OpenAI API key is not configured. Please set your OPENAI_API_KEY in the .env file."
+    system_prompt = (
+        "You are Jarvis, a brilliant, courteous, and highly capable AI assistant. "
+        "Provide concise, clear, and natural spoken answers. Avoid markdown formatting."
+    )
 
     try:
-        client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are Jarvis, a brilliant, courteous, and highly capable AI assistant. Provide concise, clear, and natural spoken answers."
-                },
-                {"role": "user", "content": command}
-            ],
-            max_tokens=150,
-            timeout=10
-        )
-        return response.choices[0].message.content.strip()
+        # Native Groq Client
+        if GROQ_AVAILABLE:
+            client = Groq(api_key=api_key)
+            response = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": command}
+                ],
+                max_tokens=150,
+                temperature=0.7
+            )
+            return response.choices[0].message.content.strip()
+
+        # Fallback via OpenAI client targeting Groq API endpoint
+        elif OPENAI_AVAILABLE:
+            client = OpenAI(
+                base_url="https://api.groq.com/openai/v1",
+                api_key=api_key
+            )
+            response = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": command}
+                ],
+                max_tokens=150,
+                temperature=0.7
+            )
+            return response.choices[0].message.content.strip()
+
+        else:
+            return "Neither groq nor openai library is installed. Please run pip install groq."
 
     except Exception as e:
-        print(f"[OpenAI Error]: {e}")
-        return "I encountered an issue connecting to the AI brain. Please check your network or API key."
+        print(f"[Groq AI Error]: {e}")
+        return "I encountered an issue connecting to the Groq AI engine. Please verify your internet connection and API key."
 
 
 # ==============================================================================
@@ -240,7 +270,7 @@ def processCommand(c: str) -> bool:
     # 6. News Headlines
     elif "news" in cmd or "headline" in cmd:
         api_key = NEWS_API_KEY
-        if not api_key or api_key.startswith("<") or api_key == "YOUR_NEWS_API_KEY":
+        if not api_key or api_key.startswith("<") or "YOUR_NEWS" in api_key:
             speak("News API key is not configured. Please add your NEWS_API_KEY to the .env file.")
             return True
 
@@ -255,7 +285,6 @@ def processCommand(c: str) -> bool:
                     for idx, article in enumerate(articles[:5], 1):
                         title = article.get('title', '')
                         if title:
-                            # Clean publisher suffix if present
                             clean_title = title.split(' - ')[0]
                             speak(f"Headline {idx}: {clean_title}")
                 else:
@@ -280,13 +309,13 @@ def processCommand(c: str) -> bool:
     # 8. Conversational Greetings
     elif any(greeting in cmd for greeting in ["how are you", "who are you", "what can you do"]):
         if "how are you" in cmd:
-            speak("I am operating at peak performance, Madam! How may I assist you?")
+            speak("I am operating at peak performance with Groq AI, Madam! How may I assist you?")
         elif "who are you" in cmd:
-            speak("I am Jarvis, your autonomous personal voice assistant, built using Python.")
+            speak("I am Jarvis, your autonomous personal voice assistant, powered by Groq and Python.")
         elif "what can you do" in cmd:
-            speak("I can play music, deliver top news headlines, open websites, search Google, tell jokes, and answer questions via OpenAI.")
+            speak("I can play music, deliver top news headlines, open websites, search Google, tell jokes, and answer questions via Groq Llama 3.")
 
-    # 9. Fallback to OpenAI AI Process
+    # 9. Fallback to Groq AI Process
     else:
         output = aiProcess(cmd)
         speak(output)
@@ -300,10 +329,10 @@ def processCommand(c: str) -> bool:
 
 def main():
     print("=" * 65)
-    print("        JARVIS - Autonomous AI Voice Assistant Starting")
+    print("    JARVIS - Autonomous Voice Assistant (Powered by Groq)")
     print("=" * 65)
 
-    speak("Hello Madam, Jarvis is online and ready. How can I assist you?")
+    speak("Hello Madam, Jarvis is online and powered by Groq. How can I assist you?")
 
     # Initial ambient calibration
     try:
@@ -328,8 +357,6 @@ def main():
 
                 # Detect wake word
                 if "jarvis" in spoken_text:
-                    # Check if command was spoken in the same breath
-                    # e.g., "Jarvis open youtube" -> command is "open youtube"
                     parts = spoken_text.split("jarvis", 1)
                     direct_command = parts[1].strip() if len(parts) > 1 else ""
 
@@ -344,7 +371,6 @@ def main():
                             running = processCommand(command)
 
             except sr.UnknownValueError:
-                # Background noise / incomprehensible sound
                 pass
             except sr.RequestError as e:
                 print(f"[Google STT Service Error]: {e}")
