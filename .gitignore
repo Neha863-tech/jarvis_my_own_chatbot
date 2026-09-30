@@ -1,0 +1,32 @@
+# Python virtual environments
+.venv/
+venv/
+venv311/
+env/
+ENV/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Audio temporary files
+*.mp3
+temp.mp3
+temp_*.mp3
+
+# Environment variables & secrets
+.env
+.env.local
+
+# IDE & Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+.DS_Store
